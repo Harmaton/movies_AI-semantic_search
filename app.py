@@ -1,9 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 import logging
-import pandas as pd
 from mindsdb import initialize_mindsdb, server, kb_initialized
-from models import HealthResponse, SemanticSearchRequest, SemanticSearchResponse
+from models import SemanticSearchRequest, SemanticSearchResponse
 import openai
 import os
 from dotenv import load_dotenv
@@ -22,7 +21,7 @@ client = openai.OpenAI(api_key=openai_api_key)
 # Startup and shutdown logic
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting up: Initializing MindsDB...")
+    logger.info("Initializing MindsDB context...")
     await initialize_mindsdb()
     yield
     logger.info("Shutting down...")
@@ -89,38 +88,6 @@ async def answer_question_with_llm(question: str, limit: int = 100) -> str:
         logger.error(f"Semantic search error: {e}")
         raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
 
-@app.get("/", response_model=dict)
-async def root():
-    """Root endpoint with API information"""
-    return {
-        "message": "Movie Semantic Search API",
-        "endpoints": {
-            "semantic_search": "/semantic-search - POST - Semantic search for movie-related questions",
-            "health": "/health - GET - Check API and knowledge base status",
-            "search_examples": "/search/examples - GET - Example search queries"
-        }
-    }
-
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint"""
-    if not server:
-        return HealthResponse(status="unhealthy", kb_status="disconnected")
-    
-    if not kb_initialized:
-        return HealthResponse(status="degraded", kb_status="not_initialized")
-    
-    try:
-        row_count_df = server.query("""
-            SELECT COUNT(*) AS cnt
-            FROM (SELECT id FROM movies_kb) AS t;
-        """).fetch()
-        row_count = int(row_count_df.at[0, 'cnt'])
-        return HealthResponse(status="healthy", kb_status="ready", kb_row_count=row_count)
-    except Exception as e:
-        logger.error(f"Health check error: {e}")
-        return HealthResponse(status="degraded", kb_status="error")
-
 @app.post("/semantic-search", response_model=SemanticSearchResponse)
 async def semantic_search(request: SemanticSearchRequest):
     """
@@ -141,24 +108,6 @@ async def semantic_search(request: SemanticSearchRequest):
         logger.error(f"Semantic search endpoint error: {e}")
         raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
 
-@app.get("/search/examples")
-async def search_examples():
-    """Get example search queries"""
-    return {
-        "examples": [
-            "Who a boy must defend his home against on Christmas eve?",
-            "What Anakin was lured into by Chancellor Palpatine?",
-            "Christmas movies with family themes",
-            "Space adventure and sci-fi",
-            "Romantic comedies",
-            "Action movies with superheroes",
-            "Horror movies with supernatural elements",
-            "Drama about family relationships",
-            "Movies about time travel",
-            "War movies based on true stories"
-        ]
-    }
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, log_level="info")

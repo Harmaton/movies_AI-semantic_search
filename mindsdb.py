@@ -6,6 +6,16 @@ import os
 import re
 from yaspin import yaspin
 from fastapi import HTTPException
+from dotenv import load_dotenv
+import openai
+
+load_dotenv()
+
+# Initialize OpenAI client
+openai_api_key = os.getenv("OPENAI_API_KEY")
+if not openai_api_key:
+    raise ValueError("OPENAI_API_KEY environment variable not set")
+client = openai.OpenAI(api_key=openai_api_key)
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -79,14 +89,18 @@ async def initialize_mindsdb():
 
         # Step 3: Create knowledge base
         try:
+            print("Creating knowledge base 'movies_kb'...")
             server.query("DROP KNOWLEDGE_BASE IF EXISTS movies_kb;").fetch()
-            kb_creation_query = server.query("""
+            
+            # Use f-string formatting to properly inject the API key
+            kb_creation_query = server.query(f"""
                 CREATE KNOWLEDGE_BASE movies_kb
                 USING
-                    embedding_model = {
+                    embedding_model = {{
                         "provider": "openai",
-                        "model_name": "text-embedding-3-large"
-                    },
+                        "model_name": "text-embedding-3-small",
+                        "api_key": "{openai_api_key}"
+                    }},
                     metadata_columns = ['genre', 'expanded_genres', 'rating'],
                     content_columns = ['content'],
                     id_column = 'movie_id';
@@ -97,20 +111,19 @@ async def initialize_mindsdb():
             logger.error(f"Knowledge base creation error: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to create knowledge base: {str(e)}")
 
-        # Step 4: Insert data into knowledge base
+        # Step 4: Insert data into knowledge base (reduced dataset for testing)
         try:
-            with yaspin(text="Inserting data into knowledge base..."):
+            with yaspin(text="Inserting data into knowledge base (limited dataset)..."):
                 insert_query = server.query("""
                     INSERT INTO movies_kb
                     SELECT movie_id,
-                           genre,
-                           expanded_genres,
-                           rating,
-                           content
+                        genre,
+                        expanded_genres,
+                        rating,
+                        content
                     FROM files.movies
- /
-
-                    WHERE rating >= 7.5
+                    WHERE rating >= 8.5
+                    LIMIT 30
                     USING
                         track_column = movie_id
                 """).fetch()

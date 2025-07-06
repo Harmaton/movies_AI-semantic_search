@@ -1,0 +1,39 @@
+services:
+  mindsdb:
+    image: mindsdb/mindsdb:latest
+    container_name: mindsdb_container
+    ports:
+      - "47334:47334"
+      - "47335:47335"
+    environment:
+      - MINDSDB_APIS=http
+    volumes:
+      - mindsdb_data:/root/mindsdb_storage
+    restart: unless-stopped
+
+  webapp:
+    build: .
+    container_name: webapp
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mindsdb
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - webapp
+    restart: unless-stopped
+
+volumes:
+  mindsdb_data:
